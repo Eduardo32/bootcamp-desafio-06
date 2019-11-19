@@ -15,6 +15,7 @@ import {
   Info,
   Title,
   Author,
+  Loading,
 } from './styles';
 
 export default class User extends Component {
@@ -25,6 +26,7 @@ export default class User extends Component {
   // eslint-disable-next-line react/static-property-placement
   static propTypes = {
     navigation: PropTypes.shape({
+      navigate: PropTypes.func,
       getParam: PropTypes.func,
     }).isRequired,
   };
@@ -33,26 +35,55 @@ export default class User extends Component {
     super();
     this.state = {
       stars: [],
+      loading: true,
+      page: 1,
+      refreshing: false,
     };
   }
 
   async componentDidMount() {
+    this.loadStars();
+  }
+
+  loadStars = async () => {
     const { navigation } = this.props;
+
+    const { stars, page } = this.state;
 
     const user = navigation.getParam('user');
 
-    const response = await api.get(`/users/${user.login}/starred`);
+    const response = await api.get(`/users/${user.login}/starred`, {
+      params: { page },
+    });
 
-    this.setState({ stars: response.data });
-  }
+    this.setState({
+      stars: page >= 2 ? [...stars, ...response.data] : response.data,
+      page: page + 1,
+      refreshing: false,
+      loading: false,
+    });
+  };
+
+  refreshList = async () => {
+    this.setState({ page: 1, stars: [], refreshing: true }, this.loadStars);
+  };
+
+  handleNavigation = repo => {
+    const { navigation } = this.props;
+
+    navigation.navigate('Repository', { repo });
+  };
 
   render() {
     const { navigation } = this.props;
 
     const user = navigation.getParam('user');
 
-    const { stars } = this.state;
+    const { stars, loading, refreshing } = this.state;
 
+    if (loading) {
+      return <Loading />;
+    }
     return (
       <Container>
         <Header>
@@ -62,10 +93,14 @@ export default class User extends Component {
         </Header>
 
         <Stars
+          onEndReachedThreshold={0.2}
+          onEndReached={this.loadStars}
+          onRefresh={this.refreshList}
+          refreshing={refreshing}
           data={stars}
           keyExtractor={star => String(star.id)}
           renderItem={({ item }) => (
-            <Starred>
+            <Starred onPress={() => this.handleNavigation(item)}>
               <OwnerAvatar source={{ uri: item.owner.avatar_url }} />
               <Info>
                 <Title>{item.name}</Title>
